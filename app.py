@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime, timedelta
-import plotly.express as px
 
 # Set page config
 st.set_page_config(page_title="Big Two Game Statistics", page_icon="🃏", layout="wide")
@@ -48,16 +47,32 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Load data functions (keep as they were)
+def load_latest_data(data_type):
+    data_folder = 'data/processed'
+    files = [f for f in os.listdir(data_folder) if f.startswith(data_type)]
+    if not files:
+        return None
+    latest_file = max(files, key=lambda x: os.path.getmtime(os.path.join(data_folder, x)))
+    df = pd.read_csv(os.path.join(data_folder, latest_file))
+    # Add timestamp based on file modification time
+    df['timestamp'] = pd.to_datetime(os.path.getmtime(os.path.join(data_folder, latest_file)), unit='s')
+    return df
 
-def create_bar_chart(df, x, y, title):
-    fig = px.bar(df, x=x, y=y, title=title)
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(size=14)
-    )
-    return fig
+def filter_data(df, time_filter):
+    now = datetime.now()
+    if time_filter == 'Last 30 minutes':
+        threshold = now - timedelta(minutes=30)
+    elif time_filter == 'Last 1 hour':
+        threshold = now - timedelta(hours=1)
+    else:  # All time
+        return df
+    return df[df['timestamp'] > threshold]
+
+def calculate_point_increase(current_df, previous_df):
+    if previous_df is None or current_df is None:
+        return pd.Series([0] * len(current_df)) if current_df is not None else pd.Series()
+    merged = current_df.merge(previous_df, on='team_name', suffixes=('_current', '_previous'))
+    return merged['total_points_current'] - merged['total_points_previous']
 
 def main():
     st.markdown('<p class="big-font">🃏 Big Two Game Statistics</p>', unsafe_allow_html=True)
@@ -99,7 +114,7 @@ def main():
             display_wins['Win Increase'] = wins_increase
             st.dataframe(display_wins[['team_name', 'wins', 'Win Increase']], height=400)
         with col2:
-            st.plotly_chart(create_bar_chart(filtered_wins, 'team_name', 'wins', 'Wins by Team'), use_container_width=True)
+            st.bar_chart(filtered_wins.set_index('team_name')['wins'])
 
         # Display Leaderboard and Chart
         st.markdown('<p class="medium-font">Leaderboard</p>', unsafe_allow_html=True)
@@ -109,7 +124,7 @@ def main():
             display_leaderboard['Point Increase'] = leaderboard_increase
             st.dataframe(display_leaderboard[['rank', 'team_name', 'total_points', 'Point Increase']], height=400)
         with col2:
-            st.plotly_chart(create_bar_chart(filtered_leaderboard, 'team_name', 'total_points', 'Total Points by Team'), use_container_width=True)
+            st.bar_chart(filtered_leaderboard.set_index('team_name')['total_points'])
 
     else:
         st.error("Failed to load data. Please check your data directory.")
