@@ -9,7 +9,10 @@ def load_latest_data(data_type):
     if not files:
         return None
     latest_file = max(files, key=lambda x: os.path.getmtime(os.path.join(data_folder, x)))
-    return pd.read_csv(os.path.join(data_folder, latest_file))
+    df = pd.read_csv(os.path.join(data_folder, latest_file))
+    # Add timestamp based on file modification time
+    df['timestamp'] = pd.to_datetime(os.path.getmtime(os.path.join(data_folder, latest_file)), unit='s')
+    return df
 
 def filter_data(df, time_filter):
     now = datetime.now()
@@ -22,10 +25,10 @@ def filter_data(df, time_filter):
     return df[df['timestamp'] > threshold]
 
 def calculate_point_increase(current_df, previous_df):
-    if previous_df is None:
-        return pd.Series([0] * len(current_df))
+    if previous_df is None or current_df is None:
+        return pd.Series([0] * len(current_df)) if current_df is not None else pd.Series()
     merged = current_df.merge(previous_df, on='team_name', suffixes=('_current', '_previous'))
-    return merged['points_current'] - merged['points_previous']
+    return merged['total_points_current'] - merged['total_points_previous']
 
 def main():
     st.title("Big Two Game Statistics")
@@ -42,6 +45,10 @@ def main():
         filtered_wins = filter_data(wins_df, time_filter)
         filtered_leaderboard = filter_data(leaderboard_df, time_filter)
 
+        # Sort dataframes in descending order
+        filtered_wins = filtered_wins.sort_values('wins', ascending=False)
+        filtered_leaderboard = filtered_leaderboard.sort_values('total_points', ascending=False)
+
         # Calculate point increase
         previous_wins = load_latest_data('wins_previous')  # You need to save the previous state
         previous_leaderboard = load_latest_data('leaderboard_previous')  # You need to save the previous state
@@ -50,11 +57,15 @@ def main():
 
         # Display Wins Table
         st.header("Wins Table")
-        st.dataframe(pd.concat([filtered_wins, wins_increase.rename('Win Increase')], axis=1))
+        display_wins = filtered_wins.copy()
+        display_wins['Win Increase'] = wins_increase
+        st.dataframe(display_wins[['team_name', 'wins', 'Win Increase']])
 
         # Display Leaderboard
         st.header("Leaderboard")
-        st.dataframe(pd.concat([filtered_leaderboard, leaderboard_increase.rename('Point Increase')], axis=1))
+        display_leaderboard = filtered_leaderboard.copy()
+        display_leaderboard['Point Increase'] = leaderboard_increase
+        st.dataframe(display_leaderboard[['rank', 'team_name', 'total_points', 'Point Increase']])
 
         # Display update timer
         last_update = datetime.fromtimestamp(os.path.getmtime(os.path.join('data/processed', max(os.listdir('data/processed')))))
