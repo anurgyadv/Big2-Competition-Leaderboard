@@ -8,7 +8,7 @@ import subprocess
 from datetime import datetime
 
 def login():
-    login_url = 'https://bigtwo.codersforcauses.org/api/token/'
+    login_url = '/api/token/'
     login_payload = {
         'team_name': 'Team Horizon',  # Replace with your team name
         'password': 'Password@123'    # Replace with your password
